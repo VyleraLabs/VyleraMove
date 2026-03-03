@@ -1,0 +1,175 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String?
+  email     String   @unique
+  password  String
+  // Stored as String for SQLite compatibility. Use 'UserRole' enum from types/enums.ts
+  role      String   @default("DRIVER")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Vehicle {
+  id             String        @id @default(cuid())
+  make           String
+  model          String
+  licensePlate   String        @unique
+  vin            String        @unique
+  year           Int           @default(2024)
+  capacity       Int
+
+  // Hardware / IT Fields
+  imei_tracker       String?
+  serial_dsm_cam     String?
+  serial_road_cam    String?
+  tablet_id          String?
+  ip_address_starlink String?
+
+  // Stored as String. Use 'VehicleStatus' enum from types/enums.ts
+  status         String        @default("AVAILABLE")
+  // Stored as String. Use 'VehicleType' enum from types/enums.ts
+  type           String
+  currentMileage Int           @default(0)
+
+  // Fuel Metrics
+  avg_fuel_consumption Float @default(0.0)
+
+  // Safety
+  immobilizer_active Boolean   @default(false)
+
+  trips          Trip[]
+  maintenanceLogs MaintenanceLog[]
+  sobrietyTests  SobrietyTest[]
+
+  // Relation to Driver (One-to-One mostly, but technically One Vehicle can have One Current Driver)
+  currentDriver  Driver?
+
+  // Subscriptions & Insurance
+  subscription_starlink_due DateTime?
+  insurance_renewal_due    DateTime?
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model Driver {
+  id             String   @id @default(cuid())
+  name           String
+  phone          String
+  license_number String
+  license_expiry DateTime
+  rfid_card_id   String?  @unique // For Teltonika Driver ID reader
+  status         String   // AVAILABLE, ON_TRIP, OFF_DUTY, SUSPENDED
+  languages      String   // Comma-separated (e.g., "English, Chinese")
+  rating         Float    @default(5.0)
+
+  // Scoring & KPI
+  trust_score    Int      @default(100)
+  // Stored as String. Use 'KPIGrade' enum from types/enums.ts
+  kpi_grade      String   @default("A")
+
+  // Sobriety & Violations
+  is_suspended   Boolean  @default(false)
+
+  // Current Vehicle Relation
+  current_vehicle_id String? @unique
+  currentVehicle     Vehicle? @relation(fields: [current_vehicle_id], references: [id])
+
+  trips          Trip[]
+  maintenanceLogs MaintenanceLog[]
+  sobrietyTests  SobrietyTest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MaintenanceLog {
+  id             String   @id @default(cuid())
+  date           DateTime
+
+  vehicleId      String
+  vehicle        Vehicle  @relation(fields: [vehicleId], references: [id])
+
+  driverId       String
+  driver         Driver   @relation(fields: [driverId], references: [id])
+
+  cost           Float
+  // Stored as String. Use 'MaintenanceCategory' enum from types/enums.ts
+  category       String
+
+  invoice_url    String
+  ocr_raw_text   String?
+  // Stored as String (JSON) due to SQLite limitations
+  ai_analysis_json String?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Trip {
+  id               String     @id @default(cuid())
+  guest_name       String
+  guest_phone      String?
+  pickup_location  String
+  dropoff_location String
+  pickup_time      DateTime
+  // Stored as String. Use 'TripStatus' enum from types/enums.ts
+  status           String     @default("PENDING")
+  notes            String?
+
+  // Relations
+  vehicleId        String?
+  vehicle          Vehicle?   @relation(fields: [vehicleId], references: [id])
+
+  driverId         String?
+  driver           Driver?    @relation(fields: [driverId], references: [id])
+
+  telemetry        TripTelemetry?
+
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+}
+
+model TripTelemetry {
+  id                 String   @id @default(cuid())
+
+  tripId             String   @unique
+  trip               Trip     @relation(fields: [tripId], references: [id])
+
+  idle_time_minutes  Int      @default(0)
+  alcohol_check_passed Boolean @default(true)
+  alcohol_level      Float    @default(0.0)
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model SobrietyTest {
+  id          String   @id @default(cuid())
+  timestamp   DateTime
+  result      String   // Use 'SobrietyResult' enum from types/enums.ts
+  bac_level   Float
+  photo_url   String?
+  is_override Boolean  @default(false)
+
+  vehicleId   String
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
+
+  driverId    String
+  driver      Driver   @relation(fields: [driverId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
